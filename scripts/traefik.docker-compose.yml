@@ -1,0 +1,38 @@
+# Traefik edge — host network so ACME can reach Let's Encrypt.
+# Resolver name "cloudflare" kept for existing app labels (HTTP-01, not CF DNS API).
+# Certs issue only when public A records point to this server (82.38.44.122).
+
+services:
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    restart: unless-stopped
+    mem_limit: 256m
+    memswap_limit: 256m
+    network_mode: host
+    env_file:
+      - path: .env
+        required: false
+    extra_hosts:
+      - "acme-v02.api.letsencrypt.org:172.65.32.248"
+    command:
+      - "--log.level=INFO"
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=web"
+      - "--entryPoints.web.address=:80"
+      - "--entryPoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entryPoints.web.http.redirections.entryPoint.scheme=https"
+      - "--entryPoints.web.http.redirections.entryPoint.permanent=true"
+      - "--entryPoints.websecure.address=:443"
+      - "--certificatesresolvers.cloudflare.acme.httpchallenge=true"
+      - "--certificatesresolvers.cloudflare.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.cloudflare.acme.email=${CF_API_EMAIL:-admin@zeeshad.com}"
+      - "--certificatesresolvers.cloudflare.acme.storage=/acme.json"
+    environment:
+      - CF_API_EMAIL=${CF_API_EMAIL}
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./acme.json:/acme.json"

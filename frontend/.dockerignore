@@ -1,0 +1,14 @@
+node_modules
+.git
+.gitignore
+Dockerfile
+.dockerignore
+npm-debug.log*
+*.md
+.env*
+!.env.example
+src
+# Keep only standalone runtime artifacts from host build
+.next/**
+!.next/standalone/**
+!.next/static/**

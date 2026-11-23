@@ -1,0 +1,118 @@
+# SIGBL ERP Cloud (JMC) — Traefik on mushaz.com
+# Hosts: si-erp.mushaz.com (web) · si-erp-api.mushaz.com (api)
+
+x-api-env: &api-env
+  DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY}
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-si-erp-api.mushaz.com,si-erp.mushaz.com,localhost,127.0.0.1}
+  DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-https://si-erp.mushaz.com,https://si-erp-api.mushaz.com}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://si-erp.mushaz.com}
+  FRONTEND_URL: ${FRONTEND_URL:-https://si-erp.mushaz.com}
+  PUBLIC_MEDIA_BASE: ${PUBLIC_MEDIA_BASE:-https://si-erp-api.mushaz.com}
+  PLATFORM_ROOT_DOMAIN: ${PLATFORM_ROOT_DOMAIN:-si-erp.mushaz.com}
+  PLATFORM_HOSTS: ${PLATFORM_HOSTS:-si-erp.mushaz.com,si-erp-api.mushaz.com}
+  ALLOW_TENANT_CUSTOM_DOMAINS: ${ALLOW_TENANT_CUSTOM_DOMAINS:-true}
+  SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-false}
+  DB_ENGINE: django.db.backends.postgresql
+  DB_NAME: ${POSTGRES_DB:-sigbl}
+  DB_USER: ${POSTGRES_USER:-sigbl}
+  DB_PASSWORD: ${POSTGRES_PASSWORD:-sigblpassword}
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DJANGO_TIME_ZONE: Asia/Karachi
+  RUN_SEED: ${RUN_SEED:-0}
+
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: jmc_api
+    environment:
+      <<: *api-env
+    volumes:
+      - jmc_media:/app/media
+      - jmc_backups:/app/backups
+    networks:
+      - web
+      - jmc_internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.jmc-api.rule=Host(`${API_DOMAIN:-si-erp-api.mushaz.com}`)"
+      - "traefik.http.routers.jmc-api.entrypoints=websecure"
+      - "traefik.http.routers.jmc-api.tls=true"
+      - "traefik.http.routers.jmc-api.tls.certresolver=cloudflare"
+      - "traefik.http.services.jmc-api.loadbalancer.server.port=8000"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=5)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
+
+  # Host-build Next standalone, then: docker compose build web
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: jmc_web
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+    networks:
+      - web
+    depends_on:
+      api:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.jmc-web.rule=Host(`${APP_DOMAIN:-si-erp.mushaz.com}`)"
+      - "traefik.http.routers.jmc-web.entrypoints=websecure"
+      - "traefik.http.routers.jmc-web.tls=true"
+      - "traefik.http.routers.jmc-web.tls.certresolver=cloudflare"
+      - "traefik.http.services.jmc-web.loadbalancer.server.port=3000"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17
+    container_name: jmc_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sigbl}
+      POSTGRES_USER: ${POSTGRES_USER:-sigbl}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sigblpassword}
+      TZ: Asia/Karachi
+    volumes:
+      - jmc_db_data:/var/lib/postgresql/data
+    networks:
+      - jmc_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sigbl} -d ${POSTGRES_DB:-sigbl}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+networks:
+  web:
+    external: true
+    name: web
+  jmc_internal:
+    driver: bridge
+
+volumes:
+  jmc_db_data:
+  jmc_media:
+  jmc_backups:

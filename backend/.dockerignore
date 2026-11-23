@@ -1,0 +1,17 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.sqlite3
+db.sqlite3
+media
+staticfiles
+logs
+backups
+.env
+.git
+.gitignore
+*.md
+.pytest_cache
+.mypy_cache
+# keep wheels/ for offline pip install inside Docker
