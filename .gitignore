@@ -7,6 +7,7 @@ backend/media/
 backend/staticfiles/
 backend/.env
 BDM/
+scripts/
 frontend/node_modules/
 frontend/.next/
 frontend/.env.local
